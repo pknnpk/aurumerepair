@@ -1,0 +1,89 @@
+#0 building with "desktop-linux" instance using docker driver
+
+#1 [internal] load build definition from Dockerfile
+#1 transferring dockerfile: 2.08kB done
+#1 DONE 0.0s
+
+#2 [internal] load metadata for docker.io/library/node:18-alpine
+#2 DONE 0.5s
+
+#3 [internal] load .dockerignore
+#3 transferring context: 82B done
+#3 DONE 0.0s
+
+#4 [base 1/1] FROM docker.io/library/node:18-alpine@sha256:8d6421d663b4c28fd3ebc498332f249011d118945588d0a35cb9bc4b8ca09d9e
+#4 DONE 0.0s
+
+#5 [builder 1/4] WORKDIR /app
+#5 CACHED
+
+#6 [runner 2/6] RUN addgroup --system --gid 1001 nodejs
+#6 CACHED
+
+#7 [runner 3/6] RUN adduser --system --uid 1001 nextjs
+#7 CACHED
+
+#8 [internal] load build context
+#8 transferring context: 5.42kB done
+#8 DONE 0.0s
+
+#9 [deps 1/4] RUN apk add --no-cache libc6-compat
+#9 CACHED
+
+#10 [deps 3/4] COPY package.json yarn.lock* package-lock.json* pnpm-lock.yaml* ./
+#10 CACHED
+
+#11 [deps 4/4] RUN   if [ -f yarn.lock ]; then yarn --frozen-lockfile;   elif [ -f package-lock.json ]; then npm ci;   elif [ -f pnpm-lock.yaml ]; then yarn global add pnpm && pnpm i --frozen-lockfile;   else echo "Lockfile not found." && exit 1;   fi
+#11 CACHED
+
+#12 [deps 2/4] WORKDIR /app
+#12 CACHED
+
+#13 [builder 2/4] COPY --from=deps /app/node_modules ./node_modules
+#13 CACHED
+
+#14 [builder 3/4] COPY . .
+#14 DONE 0.1s
+
+#15 [builder 4/4] RUN   if [ -f yarn.lock ]; then yarn run build;   elif [ -f package-lock.json ]; then npm run build;   elif [ -f pnpm-lock.yaml ]; then corepack enable pnpm && pnpm run build;   else echo "Lockfile not found." && exit 1;   fi
+#15 0.562 
+#15 0.562 > aurumerepair@0.1.0 build
+#15 0.562 > next build
+#15 0.562 
+#15 0.784 You are using Node.js 18.20.8. For Next.js, Node.js version ">=20.9.0" is required.
+#15 0.789 npm notice
+#15 0.789 npm notice New major version of npm available! 10.8.2 -> 11.6.3
+#15 0.789 npm notice Changelog: https://github.com/npm/cli/releases/tag/v11.6.3
+#15 0.789 npm notice To update run: npm install -g npm@11.6.3
+#15 0.789 npm notice
+#15 ERROR: process "/bin/sh -c if [ -f yarn.lock ]; then yarn run build;   elif [ -f package-lock.json ]; then npm run build;   elif [ -f pnpm-lock.yaml ]; then corepack enable pnpm && pnpm run build;   else echo \"Lockfile not found.\" && exit 1;   fi" did not complete successfully: exit code: 1
+------
+ > [builder 4/4] RUN   if [ -f yarn.lock ]; then yarn run build;   elif [ -f package-lock.json ]; then npm run build;   elif [ -f pnpm-lock.yaml ]; then corepack enable pnpm && pnpm run build;   else echo "Lockfile not found." && exit 1;   fi:
+0.562 
+0.562 > aurumerepair@0.1.0 build
+0.562 > next build
+0.562 
+0.784 You are using Node.js 18.20.8. For Next.js, Node.js version ">=20.9.0" is required.
+0.789 npm notice
+0.789 npm notice New major version of npm available! 10.8.2 -> 11.6.3
+0.789 npm notice Changelog: https://github.com/npm/cli/releases/tag/v11.6.3
+0.789 npm notice To update run: npm install -g npm@11.6.3
+0.789 npm notice
+------
+
+ [33m3 warnings found (use docker --debug to expand):
+[0m - LegacyKeyValueFormat: "ENV key=value" should be used instead of legacy "ENV key value" format (line 41)
+ - LegacyKeyValueFormat: "ENV key=value" should be used instead of legacy "ENV key value" format (line 60)
+ - LegacyKeyValueFormat: "ENV key=value" should be used instead of legacy "ENV key value" format (line 62)
+Dockerfile:30
+--------------------
+  29 |     
+  30 | >>> RUN \
+  31 | >>>   if [ -f yarn.lock ]; then yarn run build; \
+  32 | >>>   elif [ -f package-lock.json ]; then npm run build; \
+  33 | >>>   elif [ -f pnpm-lock.yaml ]; then corepack enable pnpm && pnpm run build; \
+  34 | >>>   else echo "Lockfile not found." && exit 1; \
+  35 | >>>   fi
+  36 |     
+--------------------
+ERROR: failed to build: failed to solve: process "/bin/sh -c if [ -f yarn.lock ]; then yarn run build;   elif [ -f package-lock.json ]; then npm run build;   elif [ -f pnpm-lock.yaml ]; then corepack enable pnpm && pnpm run build;   else echo \"Lockfile not found.\" && exit 1;   fi" did not complete successfully: exit code: 1
