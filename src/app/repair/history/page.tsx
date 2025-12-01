@@ -1,9 +1,12 @@
-import { createClient } from "@/utils/supabase/server";
-import { redirect } from "next/navigation";
+"use client";
+
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Plus } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 
 const statusMap: Record<string, { label: string; color: string }> = {
     pending_check: { label: "รอเช็ค", color: "bg-yellow-500" },
@@ -15,21 +18,42 @@ const statusMap: Record<string, { label: string; color: string }> = {
     completed: { label: "เสร็จสิ้น", color: "bg-green-500" },
 };
 
-export default async function RepairHistoryPage() {
-    const supabase = await createClient();
-    const {
-        data: { user },
-    } = await supabase.auth.getUser();
+export default function RepairHistoryPage() {
+    const { data: session, status } = useSession();
+    const router = useRouter();
+    const [repairs, setRepairs] = useState<any[]>([]);
+    const [loading, setLoading] = useState(true);
 
-    if (!user) {
-        redirect("/login");
+    useEffect(() => {
+        if (status === "unauthenticated") {
+            router.push("/login");
+        }
+    }, [status, router]);
+
+    useEffect(() => {
+        const fetchRepairs = async () => {
+            if (!session?.user) return;
+            try {
+                const res = await fetch("/api/repairs");
+                if (res.ok) {
+                    const data = await res.json();
+                    setRepairs(data);
+                }
+            } catch (error) {
+                console.error("Error fetching repairs:", error);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        if (session?.user) {
+            fetchRepairs();
+        }
+    }, [session]);
+
+    if (status === "loading" || loading) {
+        return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
     }
-
-    const { data: repairs } = await supabase
-        .from("repairs")
-        .select("id, created_at, status, items, return_method, cost_external, discount, shipping_cost, total_price")
-        .eq("customer_id", user.id)
-        .order("created_at", { ascending: false });
 
     return (
         <div className="min-h-screen bg-slate-50 py-8 px-4 sm:px-6 lg:px-8">
@@ -56,7 +80,7 @@ export default async function RepairHistoryPage() {
                                             รหัสใบซ่อม: {repair.id.slice(0, 8)}
                                         </div>
                                         <div className="text-xs text-slate-400">
-                                            {new Date(repair.created_at).toLocaleDateString("th-TH", {
+                                            {new Date(repair.createdAt).toLocaleDateString("th-TH", {
                                                 year: "numeric",
                                                 month: "long",
                                                 day: "numeric",
@@ -82,11 +106,11 @@ export default async function RepairHistoryPage() {
                                     </ul>
                                 </div>
 
-                                {repair.total_price && (
+                                {repair.totalPrice && (
                                     <div className="border-t pt-3 flex justify-between items-center">
                                         <div className="text-sm font-medium">ราคาประเมิน:</div>
                                         <div className="text-lg font-bold text-[#00B900]">
-                                            ฿{repair.total_price.toLocaleString()}
+                                            ฿{parseFloat(repair.totalPrice).toLocaleString()}
                                         </div>
                                     </div>
                                 )}

@@ -1,34 +1,66 @@
-import { createClient } from "@/utils/supabase/server";
-import { redirect } from "next/navigation";
+"use client";
+
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import QRCode from "react-qr-code";
-
 import PrintButton from "@/components/print-button";
+import { useSession } from "next-auth/react";
 
-export default async function PrintRepairOrderPage({
+export default function PrintRepairOrderPage({
     params,
 }: {
     params: { id: string };
 }) {
-    const supabase = await createClient();
-    const {
-        data: { user },
-    } = await supabase.auth.getUser();
+    const { data: session, status } = useSession();
+    const router = useRouter();
+    const [repair, setRepair] = useState<any>(null);
+    const [loading, setLoading] = useState(true);
 
-    if (!user) {
-        redirect("/login");
+    useEffect(() => {
+        if (status === "unauthenticated") {
+            router.push("/login");
+        }
+    }, [status, router]);
+
+    useEffect(() => {
+        const fetchRepair = async () => {
+            if (!session?.user) return;
+            try {
+                const res = await fetch(`/api/repairs/${params.id}`);
+
+                if (res.ok) {
+                    const data = await res.json();
+                    setRepair(data);
+                } else {
+                    // Fallback to fetching all if individual endpoint fails or not implemented
+                    const resAll = await fetch(`/api/repairs`);
+                    if (resAll.ok) {
+                        const all = await resAll.json();
+                        const found = all.find((r: any) => r.id === params.id);
+                        setRepair(found);
+                    }
+                }
+            } catch (error) {
+                console.error("Error fetching repair:", error);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        if (session?.user) {
+            fetchRepair();
+        }
+    }, [session, params.id]);
+
+    if (status === "loading" || loading) {
+        return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
     }
-
-    const { data: repair } = await supabase
-        .from("repairs")
-        .select("*, profiles:customer_id(*)")
-        .eq("id", params.id)
-        .single();
 
     if (!repair) {
-        return <div>Repair not found</div>;
+        return <div className="p-8">Repair not found</div>;
     }
 
-    const customer = repair.profiles;
+    const customer = repair.customer;
 
     return (
         <div className="bg-white min-h-screen p-8 print:p-0 text-black">
@@ -50,7 +82,7 @@ export default async function PrintRepairOrderPage({
                     <h2 className="text-xl font-semibold">ใบแจ้งซ่อม (Repair Order)</h2>
                     <p className="text-sm text-gray-500">#{repair.id.slice(0, 8)}</p>
                     <p className="text-sm text-gray-500">
-                        วันที่: {new Date(repair.created_at).toLocaleDateString("th-TH")}
+                        วันที่: {new Date(repair.createdAt).toLocaleDateString("th-TH")}
                     </p>
                 </div>
             </div>
@@ -61,7 +93,7 @@ export default async function PrintRepairOrderPage({
                     <h3 className="font-bold mb-2 border-b w-fit">ข้อมูลลูกค้า</h3>
                     {customer ? (
                         <div className="text-sm space-y-1">
-                            <p><span className="font-semibold">ชื่อ:</span> {customer.first_name} {customer.last_name}</p>
+                            <p><span className="font-semibold">ชื่อ:</span> {customer.firstName} {customer.lastName}</p>
                             <p><span className="font-semibold">เบอร์โทร:</span> {customer.mobile}</p>
                             <p><span className="font-semibold">อีเมล:</span> {customer.email}</p>
                         </div>
@@ -111,19 +143,19 @@ export default async function PrintRepairOrderPage({
                 <div className="w-1/2 space-y-2 text-right">
                     <div className="flex justify-between">
                         <span>รวมเป็นเงิน:</span>
-                        <span>฿{repair.cost_external?.toLocaleString() || "0.00"}</span>
+                        <span>฿{parseFloat(repair.costExternal || 0).toLocaleString()}</span>
                     </div>
                     <div className="flex justify-between">
                         <span>ส่วนลด:</span>
-                        <span>-฿{repair.discount?.toLocaleString() || "0.00"}</span>
+                        <span>-฿{parseFloat(repair.discount || 0).toLocaleString()}</span>
                     </div>
                     <div className="flex justify-between">
                         <span>ค่าจัดส่ง:</span>
-                        <span>฿{repair.shipping_cost?.toLocaleString() || "0.00"}</span>
+                        <span>฿{parseFloat(repair.shippingCost || 0).toLocaleString()}</span>
                     </div>
                     <div className="flex justify-between font-bold text-lg border-t pt-2 mt-2">
                         <span>ยอดสุทธิ:</span>
-                        <span>฿{repair.total_price?.toLocaleString() || "0.00"}</span>
+                        <span>฿{parseFloat(repair.totalPrice || 0).toLocaleString()}</span>
                     </div>
                 </div>
             </div>

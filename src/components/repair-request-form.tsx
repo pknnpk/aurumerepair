@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { createClient } from "@/utils/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -16,6 +15,7 @@ import {
 } from "@/components/ui/select";
 import { useRouter } from "next/navigation";
 import { Plus, Trash2, Upload } from "lucide-react";
+import { useSession } from "next-auth/react";
 
 type RepairItem = {
     id: string;
@@ -26,7 +26,7 @@ type RepairItem = {
 
 export default function RepairRequestForm() {
     const router = useRouter();
-    const supabase = createClient();
+    const { data: session } = useSession();
     const [loading, setLoading] = useState(false);
     const [returnMethod, setReturnMethod] = useState<"pickup" | "mail">("pickup");
     const [items, setItems] = useState<RepairItem[]>([
@@ -65,56 +65,70 @@ export default function RepairRequestForm() {
         e.preventDefault();
         setLoading(true);
 
-        const {
-            data: { user },
-        } = await supabase.auth.getUser();
-        if (!user) return;
+        if (!session?.user) return;
 
-        // Upload images and prepare item data
-        const processedItems = await Promise.all(
-            items.map(async (item) => {
-                const imageUrls = await Promise.all(
-                    item.images.map(async (file) => {
-                        const fileExt = file.name.split(".").pop();
-                        const fileName = `${user.id}/${crypto.randomUUID()}.${fileExt}`;
-                        const { error } = await supabase.storage
-                            .from("repairs")
-                            .upload(fileName, file);
+        try {
+            // Upload images and prepare item data
+            const processedItems = await Promise.all(
+                items.map(async (item) => {
+                    const imageUrls = await Promise.all(
+                        item.images.map(async (file) => {
+                            // Get Signed URL
+                            const res = await fetch("/api/upload", {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({
+                                    filename: file.name,
+                                    contentType: file.type,
+                                }),
+                            });
 
-                        if (error) throw error;
+                            if (!res.ok) throw new Error("Failed to get upload URL");
+                            const { url, publicUrl } = await res.json();
 
-                        const { data: { publicUrl } } = supabase.storage
-                            .from("repairs")
-                            .getPublicUrl(fileName);
+                            // Upload to GCS
+                            const uploadRes = await fetch(url, {
+                                method: "PUT",
+                                headers: { "Content-Type": file.type },
+                                body: file,
+                            });
 
-                        return publicUrl;
-                    })
-                );
+                            if (!uploadRes.ok) throw new Error("Failed to upload image");
 
-                return {
-                    description: item.description,
-                    plating: item.plating,
-                    images: imageUrls,
-                };
-            })
-        );
+                            return publicUrl;
+                        })
+                    );
 
-        // Create Repair Request
-        const { error } = await supabase.from("repairs").insert({
-            customer_id: user.id,
-            items: processedItems,
-            return_method: returnMethod,
-            status: "pending_check",
-        });
+                    return {
+                        description: item.description,
+                        plating: item.plating,
+                        images: imageUrls,
+                    };
+                })
+            );
 
-        if (error) {
+            // Create Repair Request
+            const res = await fetch("/api/repairs", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    items: processedItems,
+                    returnMethod,
+                }),
+            });
+
+            if (!res.ok) {
+                throw new Error("Failed to create repair request");
+            }
+
+            setLoading(false);
+            router.push("/repair/success");
+        } catch (error) {
             console.error("Error creating repair request:", error);
             setLoading(false);
-            return;
         }
-
-        setLoading(false);
-        router.push("/repair/success");
     };
 
     return (

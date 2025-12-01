@@ -37,6 +37,7 @@ export async function POST(req: Request) {
             if (!userId) return;
 
             if (text === "ลงทะเบียน" || text === "แก้ทะเบียน") {
+                const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000";
                 await client.replyMessage({
                     replyToken: event.replyToken,
                     messages: [
@@ -50,10 +51,7 @@ export async function POST(req: Request) {
                                     {
                                         type: "uri",
                                         label: "ลงทะเบียน / แก้ไขข้อมูล",
-                                        uri: `${process.env.NEXT_PUBLIC_SUPABASE_URL?.replace(
-                                            "54321",
-                                            "3000"
-                                        )}/register`, // Using localhost:3000 for now, in prod this should be the real URL
+                                        uri: `${baseUrl}/register`,
                                     },
                                 ],
                             },
@@ -61,6 +59,7 @@ export async function POST(req: Request) {
                     ],
                 });
             } else if (text === "ส่งซ่อม") {
+                const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000";
                 await client.replyMessage({
                     replyToken: event.replyToken,
                     messages: [
@@ -74,10 +73,7 @@ export async function POST(req: Request) {
                                     {
                                         type: "uri",
                                         label: "แจ้งส่งซ่อม",
-                                        uri: `${process.env.NEXT_PUBLIC_SUPABASE_URL?.replace(
-                                            "54321",
-                                            "3000"
-                                        )}/repair/new`,
+                                        uri: `${baseUrl}/repair/new`,
                                     },
                                 ],
                             },

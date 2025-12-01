@@ -1,13 +1,26 @@
+"use client";
+
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
 import RegistrationForm from "@/components/registration-form";
-import { createClient } from "@/utils/supabase/server";
-import { redirect } from "next/navigation";
+import { useSession } from "next-auth/react";
 
-export default async function RegisterPage() {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
+export default function RegisterPage() {
+    const { data: session, status } = useSession();
+    const router = useRouter();
 
-    if (!user) {
-        redirect("/login");
+    useEffect(() => {
+        if (status === "unauthenticated") {
+            router.push("/login");
+        }
+    }, [status, router]);
+
+    if (status === "loading") {
+        return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
+    }
+
+    if (!session?.user) {
+        return null; // Will redirect
     }
 
     return (

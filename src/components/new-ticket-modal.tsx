@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { createClient } from "@/utils/supabase/client";
 import {
     Dialog,
     DialogContent,
@@ -19,6 +18,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select";
+import { useSession } from "next-auth/react";
 
 type NewTicketModalProps = {
     open: boolean;
@@ -31,40 +31,47 @@ export function NewTicketModal({
     onOpenChange,
     onSuccess,
 }: NewTicketModalProps) {
-    const supabase = createClient();
+    const { data: session } = useSession();
     const [loading, setLoading] = useState(false);
     const [formData, setFormData] = useState({
         description: "",
         returnMethod: "pickup",
-        customerName: "", // Optional for walk-ins
+        customerName: "",
         customerMobile: "",
     });
 
     const handleSubmit = async () => {
+        if (!session?.user) return;
         setLoading(true);
 
-        // Create repair request
-        const { error } = await supabase.from("repairs").insert({
-            customer_id: null, // Anonymous/Walk-in
-            items: [{ description: formData.description, images: [], plating: false }],
-            return_method: formData.returnMethod,
-            status: "pending_check",
-            // Store walk-in details in items or a separate field? 
-            // For now, let's append to description or just rely on manual tracking
-            // Ideally we should have a 'customer_details' jsonb column for guest info
-        });
-
-        if (error) {
-            console.error("Error creating ticket:", error);
-        } else {
-            onSuccess();
-            onOpenChange(false);
-            setFormData({
-                description: "",
-                returnMethod: "pickup",
-                customerName: "",
-                customerMobile: "",
+        try {
+            const res = await fetch("/api/repairs", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    items: [{ description: formData.description, images: [], plating: false }],
+                    returnMethod: formData.returnMethod,
+                    // Note: We might need to handle walk-in customer details in the API or DB schema
+                    // For now, we are just creating a ticket.
+                }),
             });
+
+            if (res.ok) {
+                onSuccess();
+                onOpenChange(false);
+                setFormData({
+                    description: "",
+                    returnMethod: "pickup",
+                    customerName: "",
+                    customerMobile: "",
+                });
+            } else {
+                console.error("Failed to create ticket");
+            }
+        } catch (error) {
+            console.error("Error creating ticket:", error);
         }
         setLoading(false);
     };

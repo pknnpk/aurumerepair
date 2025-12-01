@@ -1,5 +1,6 @@
-import { createClient } from "@/utils/supabase/server";
-import { redirect } from "next/navigation";
+"use client";
+
+import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
     Table,
@@ -10,44 +11,71 @@ import {
     TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import ExportButton from "@/components/export-button";
+import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 
-export default async function FinanceDashboardPage() {
-    const supabase = await createClient();
-    const {
-        data: { user },
-    } = await supabase.auth.getUser();
+export default function FinanceDashboardPage() {
+    const { data: session, status } = useSession();
+    const router = useRouter();
+    const [repairs, setRepairs] = useState<any[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [isAuthorized, setIsAuthorized] = useState(false);
 
-    if (!user) {
-        redirect("/login");
+    useEffect(() => {
+        if (status === "unauthenticated") {
+            router.push("/login");
+        }
+    }, [status, router]);
+
+    useEffect(() => {
+        const checkAuthAndFetch = async () => {
+            if (!session?.user) return;
+
+            // @ts-ignore
+            const role = session.user.role;
+
+            if (["manager", "finance"].includes(role)) {
+                setIsAuthorized(true);
+
+                try {
+                    // Fetch repairs
+                    const repairsRes = await fetch("/api/repairs");
+                    if (repairsRes.ok) {
+                        const data = await repairsRes.json();
+                        setRepairs(data);
+                    }
+                } catch (error) {
+                    console.error("Error fetching data:", error);
+                } finally {
+                    setLoading(false);
+                }
+            } else {
+                setIsAuthorized(false);
+                setLoading(false);
+            }
+        };
+
+        if (session?.user) {
+            checkAuthAndFetch();
+        }
+    }, [session]);
+
+    if (status === "loading" || loading) {
+        return <div className="p-8">Loading...</div>;
     }
 
-    // Check role
-    const { data: profile } = await supabase
-        .from("profiles")
-        .select("role")
-        .eq("id", user.id)
-        .single();
-
-    if (!profile || !["manager", "finance"].includes(profile.role)) {
-        return <div>Access Denied</div>;
+    if (!isAuthorized) {
+        return <div className="p-8">Access Denied</div>;
     }
-
-    const { data: repairs } = await supabase
-        .from("repairs")
-        .select("*")
-        .order("created_at", { ascending: false });
-
-    if (!repairs) return <div>No data</div>;
 
     // Calculate Totals
     const totalRevenue = repairs.reduce(
-        (sum, r) => sum + (r.total_price || 0),
+        (sum, r) => sum + (parseFloat(r.totalPrice) || 0),
         0
     );
     const totalCost = repairs.reduce(
-        (sum, r) => sum + (r.cost_internal || 0),
+        (sum, r) => sum + (parseFloat(r.costInternal) || 0),
         0
     );
     const totalProfit = totalRevenue - totalCost;
@@ -167,26 +195,26 @@ export default async function FinanceDashboardPage() {
                     </TableHeader>
                     <TableBody>
                         {repairs.map((repair) => {
-                            const profit = (repair.total_price || 0) - (repair.cost_internal || 0);
+                            const profit = (parseFloat(repair.totalPrice) || 0) - (parseFloat(repair.costInternal) || 0);
                             return (
                                 <TableRow key={repair.id}>
                                     <TableCell className="font-medium">
                                         {repair.id.slice(0, 8)}
                                     </TableCell>
                                     <TableCell>
-                                        {new Date(repair.created_at).toLocaleDateString("th-TH")}
+                                        {new Date(repair.createdAt).toLocaleDateString("th-TH")}
                                     </TableCell>
                                     <TableCell>
                                         <Badge variant="outline">{repair.status}</Badge>
                                     </TableCell>
                                     <TableCell className="text-right text-red-600">
-                                        {repair.cost_internal
-                                            ? `฿${repair.cost_internal.toLocaleString()}`
+                                        {repair.costInternal
+                                            ? `฿${parseFloat(repair.costInternal).toLocaleString()}`
                                             : "-"}
                                     </TableCell>
                                     <TableCell className="text-right">
-                                        {repair.total_price
-                                            ? `฿${repair.total_price.toLocaleString()}`
+                                        {repair.totalPrice
+                                            ? `฿${parseFloat(repair.totalPrice).toLocaleString()}`
                                             : "-"}
                                     </TableCell>
                                     <TableCell className={`text-right font-bold ${profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>

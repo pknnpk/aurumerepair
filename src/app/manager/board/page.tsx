@@ -1,20 +1,49 @@
+"use client";
+
+import { useEffect, useState } from "react";
 import KanbanBoard from "@/components/kanban-board";
-import { createClient } from "@/utils/supabase/server";
-import { redirect } from "next/navigation";
+import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 
-export default async function ManagerBoardPage() {
-    const supabase = await createClient();
-    const {
-        data: { user },
-    } = await supabase.auth.getUser();
+export default function ManagerBoardPage() {
+    const { data: session, status } = useSession();
+    const router = useRouter();
+    const [isAuthorized, setIsAuthorized] = useState(false);
+    const [loading, setLoading] = useState(true);
 
-    if (!user) {
-        redirect("/login");
+    useEffect(() => {
+        if (status === "unauthenticated") {
+            router.push("/login");
+        }
+    }, [status, router]);
+
+    useEffect(() => {
+        const checkRole = async () => {
+            if (!session?.user) return;
+
+            // @ts-ignore
+            const role = session.user.role;
+
+            if (["manager", "finance"].includes(role)) {
+                setIsAuthorized(true);
+            } else {
+                router.push("/"); // Redirect unauthorized users
+            }
+            setLoading(false);
+        };
+
+        if (session?.user) {
+            checkRole();
+        }
+    }, [session, router]);
+
+    if (status === "loading" || loading) {
+        return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
     }
 
-    // TODO: Check if user has manager role
-    // const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
-    // if (profile?.role !== 'manager') redirect('/')
+    if (!isAuthorized) {
+        return null; // or Access Denied
+    }
 
     return (
         <div className="min-h-screen bg-slate-50 p-6">

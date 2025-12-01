@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { createClient } from "@/utils/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -13,9 +12,10 @@ import {
     SelectValue,
 } from "@/components/ui/select";
 import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 
 type ThaiLocation = {
-    id: number;
+    id: string;
     province: string;
     amphoe: string;
     tambon: string;
@@ -24,13 +24,13 @@ type ThaiLocation = {
 
 export default function RegistrationForm() {
     const router = useRouter();
-    const supabase = createClient();
+    const { data: session } = useSession();
     const [loading, setLoading] = useState(false);
     const [locations, setLocations] = useState<ThaiLocation[]>([]);
     const [provinces, setProvinces] = useState<string[]>([]);
     const [amphoes, setAmphoes] = useState<string[]>([]);
     const [tambons, setTambons] = useState<string[]>([]);
-    const [addressId, setAddressId] = useState<string | null>(null);
+    const [isEditMode, setIsEditMode] = useState(false);
 
     const [formData, setFormData] = useState({
         firstName: "",
@@ -49,63 +49,73 @@ export default function RegistrationForm() {
 
     useEffect(() => {
         const fetchData = async () => {
-            // Fetch locations
-            const { data: locationsData } = await supabase.from("thai_locations").select("*");
-            if (locationsData) {
-                setLocations(locationsData);
-                const uniqueProvinces = Array.from(new Set(locationsData.map((l) => l.province)));
-                setProvinces(uniqueProvinces);
-            }
+            if (!session?.user) return;
 
-            // Fetch User Data
-            const { data: { user } } = await supabase.auth.getUser();
-            if (user) {
-                const { data: profile } = await supabase.from("profiles").select("*").eq("id", user.id).single();
-                const { data: address } = await supabase.from("addresses").select("*").eq("user_id", user.id).eq("is_default", true).single();
-
-                if (profile) {
-                    setFormData((prev) => ({
-                        ...prev,
-                        firstName: profile.first_name || "",
-                        lastName: profile.last_name || "",
-                        birthDate: profile.birth_date || "",
-                        birthTime: profile.birth_time || "",
-                        birthGender: profile.birth_gender || "",
-                        mobile: profile.mobile || "",
-                        email: profile.email || "",
-                    }));
+            try {
+                // Fetch locations
+                const locRes = await fetch("/api/locations");
+                const locationsData = await locRes.json();
+                if (locationsData) {
+                    setLocations(locationsData);
+                    const uniqueProvinces = Array.from(new Set(locationsData.map((l: ThaiLocation) => l.province))) as string[];
+                    setProvinces(uniqueProvinces);
                 }
 
-                if (address && locationsData) {
-                    setAddressId(address.id);
-                    setFormData((prev) => ({
-                        ...prev,
-                        province: address.province,
-                        district: address.district,
-                        subDistrict: address.sub_district,
-                        postalCode: address.postal_code,
-                        details: address.details || "",
-                    }));
+                // Fetch User Data
+                const profileRes = await fetch("/api/profile");
 
-                    // Pre-fill cascading dropdowns
-                    const filteredAmphoes = Array.from(
-                        new Set(locationsData.filter((l) => l.province === address.province).map((l) => l.amphoe))
-                    );
-                    setAmphoes(filteredAmphoes);
+                if (profileRes.ok) {
+                    const { profile, address } = await profileRes.json();
 
-                    const filteredTambons = Array.from(
-                        new Set(
-                            locationsData
-                                .filter((l) => l.province === address.province && l.amphoe === address.district)
-                                .map((l) => l.tambon)
-                        )
-                    );
-                    setTambons(filteredTambons);
+                    if (profile) {
+                        setIsEditMode(true);
+                        setFormData((prev) => ({
+                            ...prev,
+                            firstName: profile.firstName || "",
+                            lastName: profile.lastName || "",
+                            birthDate: profile.birthDate ? new Date(profile.birthDate).toISOString().split('T')[0] : "",
+                            birthTime: profile.birthTime || "",
+                            birthGender: profile.birthGender || "",
+                            mobile: profile.mobile || "",
+                            email: profile.email || session.user?.email || "",
+                        }));
+                    } else {
+                        // Pre-fill email from NextAuth user
+                        setFormData((prev) => ({ ...prev, email: session.user?.email || "" }));
+                    }
+
+                    if (address && locationsData) {
+                        setFormData((prev) => ({
+                            ...prev,
+                            province: address.province,
+                            district: address.district,
+                            subDistrict: address.subDistrict,
+                            postalCode: address.postalCode,
+                            details: address.details || "",
+                        }));
+
+                        // Pre-fill cascading dropdowns
+                        const filteredAmphoes = Array.from(
+                            new Set(locationsData.filter((l: ThaiLocation) => l.province === address.province).map((l: ThaiLocation) => l.amphoe))
+                        ) as string[];
+                        setAmphoes(filteredAmphoes);
+
+                        const filteredTambons = Array.from(
+                            new Set(
+                                locationsData
+                                    .filter((l: ThaiLocation) => l.province === address.province && l.amphoe === address.district)
+                                    .map((l: ThaiLocation) => l.tambon)
+                            )
+                        ) as string[];
+                        setTambons(filteredTambons);
+                    }
                 }
+            } catch (error) {
+                console.error("Error fetching data:", error);
             }
         };
         fetchData();
-    }, []);
+    }, [session]);
 
     const handleProvinceChange = (value: string) => {
         setFormData({ ...formData, province: value, district: "", subDistrict: "", postalCode: "" });
@@ -145,73 +155,55 @@ export default function RegistrationForm() {
         e.preventDefault();
         setLoading(true);
 
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return;
+        if (!session?.user) return;
 
-        // Update Profile
-        const { error: profileError } = await supabase
-            .from("profiles")
-            .update({
-                first_name: formData.firstName,
-                last_name: formData.lastName,
-                birth_date: formData.birthDate,
-                birth_time: formData.birthTime || null,
-                birth_gender: formData.birthGender,
-                mobile: formData.mobile,
-                email: formData.email,
-            })
-            .eq("id", user.id);
-
-        if (profileError) {
-            console.error("Error updating profile:", profileError);
-            setLoading(false);
-            return;
-        }
-
-        // Upsert Address
-        if (addressId) {
-            const { error: addressError } = await supabase
-                .from("addresses")
-                .update({
+        try {
+            const payload = {
+                ...formData,
+                address: {
                     province: formData.province,
                     district: formData.district,
-                    sub_district: formData.subDistrict,
-                    postal_code: formData.postalCode,
+                    subDistrict: formData.subDistrict,
+                    postalCode: formData.postalCode,
                     details: formData.details,
-                })
-                .eq("id", addressId);
+                }
+            };
 
-            if (addressError) {
-                console.error("Error updating address:", addressError);
-                setLoading(false);
-                return;
+            let res;
+            if (isEditMode) {
+                res = await fetch("/api/profile", {
+                    method: "PUT",
+                    headers: {
+                        "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify(payload),
+                });
+            } else {
+                res = await fetch("/api/register", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(payload),
+                });
             }
-        } else {
-            const { error: addressError } = await supabase.from("addresses").insert({
-                user_id: user.id,
-                province: formData.province,
-                district: formData.district,
-                sub_district: formData.subDistrict,
-                postal_code: formData.postalCode,
-                details: formData.details,
-                is_default: true,
-            });
 
-            if (addressError) {
-                console.error("Error inserting address:", addressError);
-                setLoading(false);
-                return;
+            if (!res.ok) {
+                const errorData = await res.json();
+                throw new Error(errorData.error || "Failed to save");
             }
+
+            router.push("/register/success"); // Or dashboard
+        } catch (error) {
+            console.error("Error saving profile:", error);
+            // Handle error (show toast etc)
+        } finally {
+            setLoading(false);
         }
-
-        setLoading(false);
-        router.push("/register/success");
     };
 
     return (
         <form onSubmit={handleSubmit} className="space-y-6 max-w-2xl mx-auto p-6 bg-white rounded-xl shadow-sm">
             <h2 className="text-2xl font-bold text-slate-900">
-                {addressId ? "แก้ไขข้อมูลส่วนตัว" : "ลงทะเบียนลูกค้าใหม่"}
+                {isEditMode ? "แก้ไขข้อมูลส่วนตัว" : "ลงทะเบียนลูกค้าใหม่"}
             </h2>
 
             <div className="grid grid-cols-2 gap-4">
@@ -359,7 +351,7 @@ export default function RegistrationForm() {
             </div>
 
             <Button type="submit" className="w-full bg-[#00B900] hover:bg-[#009900]" disabled={loading}>
-                {loading ? "กำลังบันทึก..." : (addressId ? "บันทึกการแก้ไข" : "ลงทะเบียน")}
+                {loading ? "กำลังบันทึก..." : (isEditMode ? "บันทึกการแก้ไข" : "ลงทะเบียน")}
             </Button>
         </form>
     );
